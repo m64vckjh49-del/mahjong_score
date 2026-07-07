@@ -377,6 +377,43 @@ void main() {
     expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '立直')).value, isFalse);
   });
 
+  testWidgets('手動入力で面子を鳴き（オープン）にすると地和はオフに戻り選択不可になる',
+      (WidgetTester tester) async {
+    // 面子カードと状況フラグパネルの両方に届く必要があるため、十分縦長にしておく。
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('手動入力'));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.descendant(
+      of: find.byType(ListView),
+      matching: find.byType(Scrollable),
+    );
+
+    // デフォルト（ツモ・子）では地和が選択できるはずなのでONにしておく。
+    await tester.scrollUntilVisible(find.text('地和（役満）'), 300, scrollable: scrollable);
+    await tester.tap(find.text('地和（役満）'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '地和（役満）')).value, isTrue);
+
+    // 面子1を鳴き（オープン）にする → 副露ありの手では地和は成立し得ないため、
+    // 自動でOFFに戻り、以後は選択自体もできなくなるはず。
+    await tester.scrollUntilVisible(find.widgetWithText(FilterChip, '鳴き（オープン）').first, 300, scrollable: scrollable);
+    await tester.tap(find.widgetWithText(FilterChip, '鳴き（オープン）').first);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('地和（役満）'), 300, scrollable: scrollable);
+    final chiihouSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '地和（役満）'));
+    expect(chiihouSwitch.value, isFalse, reason: '鳴きが入った時点で地和は自動でOFFに戻るはず');
+    expect(chiihouSwitch.onChanged, isNull, reason: '副露ありの手では地和は選択不可（スイッチが無効）になるはず');
+  });
+
   testWidgets('字牌パレットは漢字ファイル名の実画像として描画され、フォールバックのテキスト表示にならない',
       (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());

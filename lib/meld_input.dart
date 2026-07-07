@@ -1168,7 +1168,16 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
                     FilterChip(
                       label: Text(_isQuad[index] ? '明槓（鳴き）' : '鳴き（オープン）'),
                       selected: melds[index].open,
-                      onSelected: (v) => setState(() => melds[index].open = v),
+                      onSelected: (v) => setState(() {
+                        melds[index].open = v;
+                        // 副露（鳴き）が入った時点で天和・地和（完全な門前かつ
+                        // 最初のツモという前提）は成立し得ないため、誤って
+                        // 引き継がれないようオフに戻す。
+                        if (v) {
+                          tenhou = false;
+                          chiihou = false;
+                        }
+                      }),
                     ),
                   ],
                 ),
@@ -1571,7 +1580,7 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
               title: const Text('天和（役満）'),
               subtitle: const Text('親の配牌時点でのツモ和了'),
               value: tenhou,
-              onChanged: (winType == hs.WinType.tsumo && isDealer)
+              onChanged: (winType == hs.WinType.tsumo && isDealer && _effectiveMenzen)
                   ? (v) => setState(() => tenhou = v)
                   : null,
             ),
@@ -1580,12 +1589,14 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
               title: const Text('地和（役満）'),
               subtitle: const Text('子の第一巡でのツモ和了（副露なし）'),
               value: chiihou,
-              onChanged: (winType == hs.WinType.tsumo && !isDealer)
+              onChanged: (winType == hs.WinType.tsumo && !isDealer && _effectiveMenzen)
                   ? (v) => setState(() => chiihou = v)
                   : null,
             ),
             Text(
-              '※ 天和は親、地和は子のツモ時のみ選択できます',
+              _effectiveMenzen
+                  ? '※ 天和は親、地和は子のツモ時のみ選択できます'
+                  : '※ 副露（鳴き）がある手では天和・地和は選択できません',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
