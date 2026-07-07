@@ -108,6 +108,47 @@ void main() {
     expect(find.text('結果'), findsOneWidget);
   });
 
+  testWidgets('おまかせ入力で「1つ戻す」を押すと直前の1枚だけが取り消される', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    Finder paletteTile(String suit, int rank) => find.descendant(
+          of: find.byType(TabBarView),
+          matching: find.byWidgetPredicate(
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/tiles/$suit$rank.png',
+          ),
+        );
+
+    // 「1つ戻す」は TextButton.icon（内部的には TextButton のサブクラス）なので、
+    // byType(TextButton) では見つからない。bySubtype で探す。
+    final undoButton = find.ancestor(of: find.text('1つ戻す'), matching: find.bySubtype<TextButton>());
+
+    // 手牌が空の間は「1つ戻す」は無効。
+    expect(tester.widget<TextButton>(undoButton).onPressed, isNull);
+
+    // 3枚タップする（1m, 2m, 3m）。
+    for (final r in [1, 2, 3]) {
+      await tester.tap(paletteTile('m', r));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 14枚（長押しで1枚削除）'), findsOneWidget);
+    expect(tester.widget<TextButton>(undoButton).onPressed, isNotNull);
+
+    // 「1つ戻す」で末尾の1枚（3m）だけが消え、2枚に戻る。
+    await tester.tap(undoButton);
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 14枚（長押しで1枚削除）'), findsOneWidget);
+
+    // もう一度押すと1枚に戻り、続けて空になれば再びボタンが無効化される。
+    await tester.tap(undoButton);
+    await tester.pumpAndSettle();
+    await tester.tap(undoButton);
+    await tester.pumpAndSettle();
+    expect(find.text('0 / 14枚（長押しで1枚削除）'), findsOneWidget);
+    expect(tester.widget<TextButton>(undoButton).onPressed, isNull);
+  });
+
   testWidgets('手動入力で面子を槓（カン）に切り替えると4枚集められ、暗槓として計算結果に反映される',
       (WidgetTester tester) async {
     // 手動入力画面は「面子カード（スクロール領域）」の上に「画面下固定の牌パレット/入力先表示」が

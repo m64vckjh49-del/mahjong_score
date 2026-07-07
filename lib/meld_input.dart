@@ -354,6 +354,16 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
     });
   }
 
+  /// 直前にタップした1枚だけを取り消す（末尾の1枚を削除する）。
+  /// 「全部クリア」しかないと、14枚並べている途中の1ミスで最初からやり直す
+  /// 羽目になってしまうため、1枚単位で戻せるようにしている。
+  void _undoLastBulkTile() {
+    if (_bulkTiles.isEmpty) return;
+    setState(() {
+      _bulkTiles.removeLast();
+    });
+  }
+
   void _clearBulkTiles() {
     setState(() {
       _bulkTiles.clear();
@@ -1101,6 +1111,11 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
             Row(
               children: [
                 Expanded(child: Text('手牌（14枚）', style: Theme.of(context).textTheme.titleMedium)),
+                TextButton.icon(
+                  onPressed: _bulkTiles.isEmpty ? null : _undoLastBulkTile,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: const Text('1つ戻す'),
+                ),
                 TextButton(onPressed: _clearBulkTiles, child: const Text('クリア')),
               ],
             ),
