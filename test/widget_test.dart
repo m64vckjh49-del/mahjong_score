@@ -58,7 +58,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('面子1（3枚）'), findsNothing);
-    expect(find.text('十三面待ち'), findsOneWidget);
+    expect(find.text('国士無双（14枚）'), findsOneWidget);
+    // 十三面待ちはスイッチではなく、実際に14枚入力した結果から自動判定される。
+    expect(find.text('0 / 14枚（長押しで1枚削除）'), findsOneWidget);
   });
 
   testWidgets('Tapping 14 tiles in bulk-input mode auto-decomposes the hand and shows a score result',
@@ -216,6 +218,163 @@ void main() {
     expect(find.text('結果'), findsOneWidget);
     // 1mは么九牌なので、暗槓のふ加算（么九・暗槓=32符）が明細に出ているはず。
     expect(find.textContaining('槓子（暗・么九）'), findsOneWidget);
+  });
+
+  testWidgets('国士無双：手動入力で実際に14枚タップすると役満として成立し、十三面待ちも自動判定される',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('手動入力'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('国士無双'));
+    await tester.pumpAndSettle();
+
+    Finder paletteTile(String suit, int rank) => find.descendant(
+          of: find.byType(TabBarView),
+          matching: find.byWidgetPredicate(
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/tiles/$suit$rank.png',
+          ),
+        );
+    Finder paletteHonor(String kanji) => find.descendant(
+          of: find.byType(TabBarView),
+          matching: find.byWidgetPredicate(
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/tiles/$kanji.png',
+          ),
+        );
+
+    // 么九牌以外（例: 2m）をタップしてもエラーになり、追加されないことを確認する。
+    await tester.tap(paletteTile('m', 2));
+    await tester.pumpAndSettle();
+    expect(find.text('国士無双で使えるのは么九牌（1・9・字牌）のみです。'), findsOneWidget);
+    expect(find.text('0 / 14枚（長押しで1枚削除）'), findsOneWidget);
+
+    // 1m, 9m, 1p, 9p, 1s, 9sをタップ。
+    await tester.tap(paletteTile('m', 1));
+    await tester.pump();
+    await tester.tap(paletteTile('m', 9));
+    await tester.pump();
+    await tester.tap(find.text('筒'));
+    await tester.pumpAndSettle();
+    await tester.tap(paletteTile('p', 1));
+    await tester.pump();
+    await tester.tap(paletteTile('p', 9));
+    await tester.pump();
+    await tester.tap(find.text('索'));
+    await tester.pumpAndSettle();
+    await tester.tap(paletteTile('s', 1));
+    await tester.pump();
+    await tester.tap(paletteTile('s', 9));
+    await tester.pump();
+
+    // 字牌7種（東南西北白發中）をタップ。ここまでで13種類がそろう。
+    await tester.tap(find.text('字'));
+    await tester.pumpAndSettle();
+    for (final kanji in ['東', '南', '西', '北', '白', '發', '中']) {
+      await tester.tap(paletteHonor(kanji));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('13 / 14枚（長押しで1枚削除）'), findsOneWidget);
+
+    // 最後にもう1枚「東」をタップして14枚目（和了牌）とする。
+    // 直前まで13種類が1枚ずつそろっていたので、これは十三面待ち（ダブル役満）になるはず。
+    await tester.tap(paletteHonor('東'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('14 / 14枚（長押しで1枚削除）'), findsOneWidget);
+    expect(find.text('✓ 国士無双の形として成立しています（十三面待ち＝ダブル役満）'), findsOneWidget);
+
+    await tester.tap(find.text('計算（門前: はい）'));
+    await tester.pumpAndSettle();
+    expect(find.text('結果'), findsOneWidget);
+  });
+
+  testWidgets('国士無双：同じ牌を3枚使おうとするとエラーになり、追加されない', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('手動入力'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('国士無双'));
+    await tester.pumpAndSettle();
+
+    Finder paletteTile(String suit, int rank) => find.descendant(
+          of: find.byType(TabBarView),
+          matching: find.byWidgetPredicate(
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/tiles/$suit$rank.png',
+          ),
+        );
+
+    // 1mを2枚（許容範囲）。
+    await tester.tap(paletteTile('m', 1));
+    await tester.pump();
+    await tester.tap(paletteTile('m', 1));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 14枚（長押しで1枚削除）'), findsOneWidget);
+
+    // 3枚目はエラーになり、枚数は増えない。
+    await tester.tap(paletteTile('m', 1));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('同じ牌を3枚以上使えません'), findsOneWidget);
+    expect(find.text('2 / 14枚（長押しで1枚削除）'), findsOneWidget);
+  });
+
+  testWidgets('おまかせ入力：同じ牌を5枚使おうとするとエラーになり、追加されない', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    Finder paletteTile(String suit, int rank) => find.descendant(
+          of: find.byType(TabBarView),
+          matching: find.byWidgetPredicate(
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/tiles/$suit$rank.png',
+          ),
+        );
+
+    for (int i = 0; i < 4; i++) {
+      await tester.tap(paletteTile('m', 1));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('4 / 14枚（長押しで1枚削除）'), findsOneWidget);
+
+    // 5枚目はエラーになり、枚数は増えない。
+    await tester.tap(paletteTile('m', 1));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('同じ牌を5枚以上使えません'), findsOneWidget);
+    expect(find.text('4 / 14枚（長押しで1枚削除）'), findsOneWidget);
+  });
+
+  testWidgets('「全部クリア」を押すと立直・ドラなどの状況フラグもリセットされる', (WidgetTester tester) async {
+    // 状況フラグ群（立直など）はListView内の下の方にあり、デフォルトのテストウィンドウ
+    // サイズだと画面下固定の操作バー/牌パレットに隠れてビルドされないため、
+    // 十分縦長のサイズに広げておく。
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    // 立直をONにしておく。
+    await tester.scrollUntilVisible(
+      find.text('立直'),
+      300,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.text('立直'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '立直')).value, isTrue);
+
+    await tester.tap(find.text('全部クリア'));
+    await tester.pumpAndSettle();
+
+    // 全部クリア後は、次の局に誤って引き継がれないよう立直もOFFに戻っているはず。
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '立直')).value, isFalse);
   });
 
   testWidgets('字牌パレットは漢字ファイル名の実画像として描画され、フォールバックのテキスト表示にならない',

@@ -125,8 +125,13 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
   // 国士無双：通常のMeld構造で表現できないため、専用フラグで判定する特殊形。
   // trueの場合、面子/雀頭・七対子の入力UIは非表示にし、役満として直接判定する。
   bool isKokushiMode = false;
-  // 国士無双の十三面待ち（13種全てが2枚以上でロン/ツモ）＝ダブル役満。
-  bool kokushi13Wait = false;
+
+  // 国士無双：14枚の么九牌をタップして直接組み立てる（おまかせ入力と同じ考え方）。
+  // 最後にタップした1枚が和了牌として扱われ、十三面待ちかどうかは
+  // （手動でスイッチを立てるのではなく）ここから自動判定する。
+  final List<Tile> _kokushiTiles = [];
+
+  bool _isKokushiEligible(Tile t) => t.suit == Suit.z || t.rank == 1 || t.rank == 9;
 
   _HandShape get _handShape =>
       isKokushiMode ? _HandShape.kokushi : (isChiitoi ? _HandShape.chiitoi : _HandShape.normal);
@@ -135,7 +140,6 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
     setState(() {
       isChiitoi = shape == _HandShape.chiitoi;
       isKokushiMode = shape == _HandShape.kokushi;
-      if (!isKokushiMode) kokushi13Wait = false;
       winningMeldIndex = -1;
     });
   }
@@ -337,10 +341,27 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
 
   List<int> _tripletGroupIndices() => [for (int i = 0; i < 4; i++) if (_isGroupTriplet(i)) i];
 
+  // ===== 牌の重複チェック（同じ牌は現実には4枚までしか存在しない） =====
+  int _countTile(Iterable<Tile> tiles, Tile t) =>
+      tiles.where((x) => x.suit == t.suit && x.rank == t.rank).length;
+
+  String _duplicateTileError(Tile t) => '${_tileLabel(t)}は同じ牌を5枚以上使えません（同じ牌は1種類につき4枚までです）。';
+
   // ===== おまかせ入力：牌プールへの追加/削除/クリア =====
   void _addBulkTile(Tile t) {
+    // 14枚目（和了牌スロット）を上書きする場合は、そのスロットの現在の牌を
+    // 集計から除外してからチェックする（同じ牌を置き直すだけなら重複にならない）。
+    final replacingLast = _bulkTiles.length >= 14;
+    final countExcludingSlot = replacingLast
+        ? _countTile(_bulkTiles.sublist(0, 13), t)
+        : _countTile(_bulkTiles, t);
+    if (countExcludingSlot >= 4) {
+      setState(() => _groupError = _duplicateTileError(t));
+      return;
+    }
     setState(() {
-      if (_bulkTiles.length < 14) {
+      _groupError = null;
+      if (!replacingLast) {
         _bulkTiles.add(t);
       } else {
         _bulkTiles[13] = t;
@@ -370,10 +391,73 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
     });
   }
 
+  // ===== 国士無双：14枚の牌プールへの追加/削除/クリア（おまかせ入力と同じ考え方） =====
+  void _addKokushiTile(Tile t) {
+    if (!_isKokushiEligible(t)) {
+      setState(() => _groupError = '国士無双で使えるのは么九牌（1・9・字牌）のみです。');
+      return;
+    }
+    if (_kokushiTiles.length >= 14) {
+      setState(() => _groupError = '国士無双の入力はすでに14枚そろっています（続けるには「1つ戻す」か「クリア」を使ってください）。');
+      return;
+    }
+    if (_countTile(_kokushiTiles, t) >= 2) {
+      setState(() => _groupError = '${_tileLabel(t)}は同じ牌を3枚以上使えません（国士無双は1種類につき最大2枚です）。');
+      return;
+    }
+    setState(() {
+      _groupError = null;
+      _kokushiTiles.add(t);
+    });
+  }
+
+  void _removeKokushiTile(int index) {
+    setState(() {
+      _kokushiTiles.removeAt(index);
+    });
+  }
+
+  void _undoLastKokushiTile() {
+    if (_kokushiTiles.isEmpty) return;
+    setState(() {
+      _kokushiTiles.removeLast();
+    });
+  }
+
+  void _clearKokushiTiles() {
+    setState(() {
+      _kokushiTiles.clear();
+    });
+  }
+
+  /// 国士無双として有効な形か（14枚・全て么九牌・13種類ちょうど＝どれか1種だけ2枚）。
+  bool _isValidKokushiShape(List<Tile> tiles) {
+    if (tiles.length != 14) return false;
+    if (!tiles.every(_isKokushiEligible)) return false;
+    final types = tiles.map((t) => '${t.suit.name}${t.rank}').toSet();
+    return types.length == 13;
+  }
+
+  /// 国士無双の十三面待ちかどうか（和了牌を除いた13枚が13種類全てを含む＝
+  /// 和了前の時点で13種類が1枚ずつ揃っていた状態）を、入力から自動判定する。
+  bool _kokushiIsThirteenWait(List<Tile> tiles, Tile winningTile) {
+    final remaining = List<Tile>.from(tiles);
+    final idx = remaining.indexWhere((t) => t.suit == winningTile.suit && t.rank == winningTile.rank);
+    if (idx == -1) return false;
+    remaining.removeAt(idx);
+    final types = remaining.map((t) => '${t.suit.name}${t.rank}').toSet();
+    return types.length == 13;
+  }
+
   // ===== 入力（タップで追加） =====
   void _addTileToActive(Tile t) {
     if (_inputMode == _InputMode.bulk) {
       _addBulkTile(t);
+      return;
+    }
+
+    if (isKokushiMode) {
+      _addKokushiTile(t);
       return;
     }
 
@@ -383,6 +467,16 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
       if (isChiitoi) {
         final g = _chiitoiGroups[_activeChiitoiPair];
         const cap = 2;
+        final replacingLast = g.length >= cap;
+
+        final allChiitoiTiles = _chiitoiGroups.expand((x) => x).toList();
+        final countExcludingSlot = replacingLast
+            ? _countTile(allChiitoiTiles, t) - _countTile([g[cap - 1]], t)
+            : _countTile(allChiitoiTiles, t);
+        if (countExcludingSlot >= 4) {
+          _groupError = _duplicateTileError(t);
+          return;
+        }
 
         if (g.length < cap) {
           g.add(t);
@@ -398,6 +492,16 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
 
       final g = _groups[_activeGroup];
       final cap = _capacityForGroupNormal(_activeGroup);
+      final replacingLast = g.length >= cap;
+
+      final allGroupTiles = _groups.expand((x) => x).toList();
+      final countExcludingSlot = replacingLast
+          ? _countTile(allGroupTiles, t) - _countTile([g[cap - 1]], t)
+          : _countTile(allGroupTiles, t);
+      if (countExcludingSlot >= 4) {
+        _groupError = _duplicateTileError(t);
+        return;
+      }
 
       if (g.length < cap) {
         g.add(t);
@@ -476,11 +580,27 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
         _isQuad[i] = false;
       }
       _bulkTiles.clear();
+      _kokushiTiles.clear();
       _activeGroup = 0;
       _activeChiitoiPair = 0;
       winningMeldIndex = -1;
 
-      // 状況系は残す（好みでここで初期化してもOK）
+      // 状況系（立直・一発・ドラ・海底/嶺上/槍槓・天和/地和）は、和了ごとに変わる
+      // 一発性の情報であり、「全部クリア」時に消し忘れると次の局の計算に
+      // 誤って引き継がれてしまう（例: 前局の天和フラグが立ったまま次局を計算し、
+      // 実際には役満ではない手が役満として計算されてしまう）ため、ここで必ず初期化する。
+      riichi = false;
+      doubleRiichi = false;
+      ippatsu = false;
+      haitei = false;
+      houtei = false;
+      rinshan = false;
+      chankan = false;
+      tenhou = false;
+      chiihou = false;
+      dora = 0;
+      akaDora = 0;
+      uraDora = 0;
     });
   }
 
@@ -725,6 +845,32 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
 
     if (isKokushiMode) {
       // 国士無双は通常のMeld構造で表現できないため、面子の入力自体を行わない。
+      // 代わりに、専用パネルでタップ入力した14枚（_kokushiTiles）を直接検証する。
+      if (_kokushiTiles.length != 14) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('入力エラー'),
+            content: Text('国士無双の牌が14枚そろっていません（現在${_kokushiTiles.length}枚）。'),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+          ),
+        );
+        return;
+      }
+      if (!_isValidKokushiShape(_kokushiTiles)) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('入力エラー'),
+            content: const Text(
+              '国士無双として成立していません。\n'
+              '么九牌（1・9・字牌）13種類がそれぞれ1〜2枚、かつそのうち1種類だけが2枚（雀頭）になるようにしてください。',
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+          ),
+        );
+        return;
+      }
       hsMelds = const <hs.Meld>[];
     } else if (isChiitoi) {
       final chiitoiMelds = buildChiitoiMeldsFromGroups();
@@ -798,8 +944,11 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
       }
     }
 
-    // 上がり牌UIは非表示なので、内部ではダミー牌（m1）を渡す
-    final winTileHs = hs.Tile(_toHsSuit(winSuit), winRank);
+    // 上がり牌UIは通常/七対子では非表示なので、内部ではダミー牌（m1）を渡す。
+    // 国士無双は専用パネルで最後にタップした牌を和了牌として扱う。
+    final winTileHs = isKokushiMode
+        ? hs.Tile(_toHsSuit(_kokushiTiles.last.suit), _kokushiTiles.last.rank)
+        : hs.Tile(_toHsSuit(winSuit), winRank);
 
     final hand = hs.HandInput(
       melds: hsMelds,
@@ -826,7 +975,7 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
       tenhou: tenhou,
       chiihou: chiihou,
       isKokushi: isKokushiMode,
-      kokushi13Wait: isKokushiMode ? kokushi13Wait : false,
+      kokushi13Wait: isKokushiMode ? _kokushiIsThirteenWait(_kokushiTiles, _kokushiTiles.last) : false,
     );
 
     final result = hs.scoreHand(hand);
@@ -1214,27 +1363,84 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
   }
 
   // ===== 国士無双：専用パネル（通常の面子入力の代わりに表示） =====
+  // おまかせ入力の牌プールと同じ考え方で、么九牌13種を実際にタップして
+  // 14枚を組み立ててもらう。以前はスイッチひとつで役満を確定させていたが、
+  // それだと実際の手牌を確認せずに役満が成立してしまうため、
+  // 必ず具体的な牌の入力→形の検証を経るようにしている。
   Widget _kokushiPanel() {
+    final has14 = _kokushiTiles.length == 14;
+    final validShape = has14 && _isValidKokushiShape(_kokushiTiles);
+    final thirteenWait = validShape ? _kokushiIsThirteenWait(_kokushiTiles, _kokushiTiles.last) : false;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('国士無双', style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                Expanded(child: Text('国士無双（14枚）', style: Theme.of(context).textTheme.titleMedium)),
+                TextButton.icon(
+                  onPressed: _kokushiTiles.isEmpty ? null : _undoLastKokushiTile,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: const Text('1つ戻す'),
+                ),
+                TextButton(onPressed: _clearKokushiTiles, child: const Text('クリア')),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '下の牌パレットで么九牌（1・9・字牌）をタップして14枚並べてください（それ以外の牌は使えません）。\n'
+              '最後にタップした1枚が和了牌として扱われ、十三面待ちかどうかは自動で判定します。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: List.generate(14, (i) {
+                final hasTile = i < _kokushiTiles.length;
+                final isWinningSlot = i == 13;
+                return GestureDetector(
+                  onLongPress: hasTile ? () => _removeKokushiTile(i) : null,
+                  child: Container(
+                    width: 42,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: isWinningSlot
+                          ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4)
+                          : Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isWinningSlot ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+                        width: isWinningSlot ? 2 : 1,
+                      ),
+                    ),
+                    child: hasTile
+                        ? Padding(padding: const EdgeInsets.all(4), child: _tileFace(_kokushiTiles[i]))
+                        : Center(
+                            child: Text(
+                              isWinningSlot ? '和了' : '□',
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ),
+                  ),
+                );
+              }),
+            ),
             const SizedBox(height: 6),
-            const Text(
-              '国士無双は通常の「面子＋雀頭」構造で表現できない特殊形のため、\n'
-              '牌の入力は不要です。役満として直接判定されます。',
-            ),
-            const SizedBox(height: 10),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('十三面待ち'),
-              subtitle: const Text('13種すべてが2枚以上そろった状態での和了（ダブル役満）'),
-              value: kokushi13Wait,
-              onChanged: (v) => setState(() => kokushi13Wait = v),
-            ),
+            Text('${_kokushiTiles.length} / 14枚（長押しで1枚削除）', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 6),
+            if (has14)
+              Text(
+                validShape
+                    ? '✓ 国士無双の形として成立しています（${thirteenWait ? "十三面待ち＝ダブル役満" : "単騎待ち＝役満"}）'
+                    : '✕ まだ国士無双の形になっていません（么九牌13種類、うち1種類だけ2枚になるようにしてください）',
+                style: TextStyle(
+                  color: validShape ? Colors.green.shade700 : Theme.of(context).colorScheme.error,
+                ),
+              ),
           ],
         ),
       ),
@@ -1617,7 +1823,9 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
                           child: Text(
                             _inputMode == _InputMode.bulk
                                 ? '入力先: 手牌（${_bulkTiles.length}/14枚）'
-                                : (isChiitoi ? '入力先: ペア${_activeChiitoiPair + 1}' : '入力先: ${_activeGroup == 4 ? "雀頭" : "面子${_activeGroup + 1}"}'),
+                                : (isKokushiMode
+                                    ? '入力先: 国士無双（${_kokushiTiles.length}/14枚・么九牌のみ）'
+                                    : (isChiitoi ? '入力先: ペア${_activeChiitoiPair + 1}' : '入力先: ${_activeGroup == 4 ? "雀頭" : "面子${_activeGroup + 1}"}')),
                           ),
                         ),
                         Text('タップで追加', style: Theme.of(context).textTheme.bodySmall),

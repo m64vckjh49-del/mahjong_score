@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:mahjong_score/meld_input.dart'; // ← ここに追加
+import 'package:mahjong_score/session.dart';
+import 'package:mahjong_score/unload_guard.dart';
 
 void main() => runApp(const MyApp());
 
@@ -76,15 +78,44 @@ Points calcPoints({
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    // 対局スコア（session.dart）は永続化しておらず、メモリ上にしかデータが
+    // 存在しない。対局中にタブを閉じる/リロードすると警告なく記録が消えて
+    // しまうため、対局が始まっている間はブラウザの離脱確認ダイアログを出す。
+    session.addListener(_syncUnloadGuard);
+    _syncUnloadGuard();
+  }
+
+  void _syncUnloadGuard() {
+    if (session.isStarted) {
+      UnloadGuard.enable();
+    } else {
+      UnloadGuard.disable();
+    }
+  }
+
+  @override
+  void dispose() {
+    session.removeListener(_syncUnloadGuard);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '麻雀点数',
       theme: ThemeData(useMaterial3: true),
-      home: const MeldInputPage(), 
+      home: const MeldInputPage(),
     );
   }
 }
