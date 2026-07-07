@@ -46,7 +46,10 @@ class SessionPlayer {
   SessionPlayer({required this.name, required this.score});
 }
 
-/// 1局分の記録（履歴表示用）。
+/// 1局分の記録（履歴表示用・取り消し用）。
+///
+/// 「取り消し（undoLast）」のために、この局を記録する直前の状態
+/// （本場・供託・親番・リーチ供託の宣言状況）も保持しておく。
 class HandRecord {
   final DateTime at;
   final String headline;
@@ -54,6 +57,11 @@ class HandRecord {
   final int honbaAfter;
   final int kyotakuAfter;
   final int dealerIndexAfter;
+  final int honbaBefore;
+  final int kyotakuBefore;
+  final int dealerIndexBefore;
+  final int handNumberBefore;
+  final List<bool> riichiBefore;
   const HandRecord({
     required this.at,
     required this.headline,
@@ -61,6 +69,11 @@ class HandRecord {
     required this.honbaAfter,
     required this.kyotakuAfter,
     required this.dealerIndexAfter,
+    required this.honbaBefore,
+    required this.kyotakuBefore,
+    required this.dealerIndexBefore,
+    required this.handNumberBefore,
+    required this.riichiBefore,
   });
 }
 
@@ -98,6 +111,10 @@ class MahjongSession extends ChangeNotifier {
   bool _started = false;
   final List<HandRecord> history = [];
 
+  /// 今回の局で各プレイヤーがリーチを宣言済みかどうか。
+  /// 1局が終わる（[_applyDeltas]が呼ばれる）たびに全員falseへリセットされる。
+  List<bool> riichiThisHand = [];
+
   bool get isStarted => _started;
   int get playerCount => players.length;
 
@@ -116,6 +133,7 @@ class MahjongSession extends ChangeNotifier {
     dealerIndex = 0;
     handNumber = 1;
     history.clear();
+    riichiThisHand = List.filled(players.length, false);
     _started = true;
     notifyListeners();
   }
@@ -123,6 +141,7 @@ class MahjongSession extends ChangeNotifier {
   void reset() {
     players = [];
     history.clear();
+    riichiThisHand = [];
     _started = false;
     honba = 0;
     kyotaku = 0;
@@ -138,6 +157,12 @@ class MahjongSession extends ChangeNotifier {
     bool consumeKyotaku = false,
   }) {
     assert(deltas.length == players.length);
+    final honbaBefore = honba;
+    final kyotakuBefore = kyotaku;
+    final dealerIndexBefore = dealerIndex;
+    final handNumberBefore = handNumber;
+    final riichiBefore = List<bool>.from(riichiThisHand);
+
     for (var i = 0; i < players.length; i++) {
       players[i].score += deltas[i];
     }
@@ -158,16 +183,62 @@ class MahjongSession extends ChangeNotifier {
         honbaAfter: honba,
         kyotakuAfter: kyotaku,
         dealerIndexAfter: dealerIndex,
+        honbaBefore: honbaBefore,
+        kyotakuBefore: kyotakuBefore,
+        dealerIndexBefore: dealerIndexBefore,
+        handNumberBefore: handNumberBefore,
+        riichiBefore: riichiBefore,
       ),
     );
+    riichiThisHand = List.filled(players.length, false);
     notifyListeners();
   }
 
   /// リーチ宣言（本人の持ち点から1000点引き、供託を1本増やす）。
-  void declareRiichi(int playerIndex) {
+  ///
+  /// 以下の場合は宣言できず、何も変更せずに`false`を返す:
+  ///   - 持ち点が1000点未満（リーチ棒を払えない）
+  ///   - この局で既にリーチ宣言済み（二重宣言防止）
+  bool declareRiichi(int playerIndex) {
+    if (players[playerIndex].score < 1000) return false;
+    if (riichiThisHand.length > playerIndex && riichiThisHand[playerIndex]) return false;
     players[playerIndex].score -= 1000;
     kyotaku += 1;
+    if (riichiThisHand.length != players.length) {
+      riichiThisHand = List.filled(players.length, false);
+    }
+    riichiThisHand[playerIndex] = true;
     notifyListeners();
+    return true;
+  }
+
+  /// リーチ宣言の取り消し（誤宣言時の訂正用）。
+  /// この局でリーチ宣言済みの場合のみ有効で、1000点を返し供託を1本減らす。
+  bool cancelRiichi(int playerIndex) {
+    if (riichiThisHand.length <= playerIndex || !riichiThisHand[playerIndex]) return false;
+    players[playerIndex].score += 1000;
+    kyotaku -= 1;
+    riichiThisHand[playerIndex] = false;
+    notifyListeners();
+    return true;
+  }
+
+  /// 直前の局の記録を取り消し、その局を記録する前の状態へ巻き戻す。
+  /// 履歴が無ければ何もせず`false`を返す。
+  bool undoLast() {
+    if (history.isEmpty) return false;
+    final last = history.first;
+    for (var i = 0; i < players.length; i++) {
+      players[i].score -= last.deltas[i];
+    }
+    honba = last.honbaBefore;
+    kyotaku = last.kyotakuBefore;
+    dealerIndex = last.dealerIndexBefore;
+    handNumber = last.handNumberBefore;
+    riichiThisHand = List<bool>.from(last.riichiBefore);
+    history.removeAt(0);
+    notifyListeners();
+    return true;
   }
 
   /// ロン和了を記録する。[points] は和了点そのもの（本場・供託は自動加算するため含めない）。

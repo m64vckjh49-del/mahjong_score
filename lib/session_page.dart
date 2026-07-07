@@ -178,6 +178,11 @@ class _SessionPageState extends State<SessionPage> {
               icon: const Icon(Icons.leaderboard),
               label: const Text('順位・精算'),
             ),
+            OutlinedButton.icon(
+              onPressed: session.history.isEmpty ? null : () => _confirmUndo(context),
+              icon: const Icon(Icons.undo),
+              label: const Text('元に戻す'),
+            ),
             TextButton.icon(
               onPressed: () => _confirmReset(context),
               icon: const Icon(Icons.refresh),
@@ -192,33 +197,81 @@ class _SessionPageState extends State<SessionPage> {
   Widget _playerCard(BuildContext context, int i) {
     final p = session.players[i];
     final isDealer = session.dealerIndex == i;
+    final isRiichi = session.riichiThisHand.length > i && session.riichiThisHand[i];
     return Card(
       child: ListTile(
         leading: CircleAvatar(child: Text(isDealer ? '親' : '${i + 1}')),
-        title: Text(p.name),
-        subtitle: Text('${p.score}点'),
-        trailing: OutlinedButton(
-          onPressed: () => _confirmRiichi(context, i),
-          child: const Text('リーチ'),
+        title: Row(
+          children: [
+            Text(p.name),
+            if (isRiichi) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.red),
+                ),
+                child: const Text('リーチ中', style: TextStyle(color: Colors.red, fontSize: 12)),
+              ),
+            ],
+          ],
         ),
+        subtitle: Text('${p.score}点'),
+        trailing: isRiichi
+            ? OutlinedButton(
+                onPressed: () => _confirmCancelRiichi(context, i),
+                child: const Text('取消'),
+              )
+            : OutlinedButton(
+                onPressed: () => _confirmRiichi(context, i),
+                child: const Text('リーチ'),
+              ),
       ),
     );
   }
 
   void _confirmRiichi(BuildContext context, int i) {
+    final canDeclare = session.players[i].score >= 1000;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('リーチ宣言'),
-        content: Text('${session.players[i].name} の持ち点から1000点引いて、供託に1本追加します。'),
+        content: Text(
+          canDeclare
+              ? '${session.players[i].name} の持ち点から1000点引いて、供託に1本追加します。'
+              : '${session.players[i].name} は持ち点が1000点未満のため、リーチを宣言できません。',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(canDeclare ? 'キャンセル' : '閉じる')),
+          if (canDeclare)
+            FilledButton(
+              onPressed: () {
+                session.declareRiichi(i);
+                Navigator.pop(context);
+              },
+              child: const Text('リーチする'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmCancelRiichi(BuildContext context, int i) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('リーチ宣言の取消'),
+        content: Text('${session.players[i].name} のリーチ宣言を取り消し、1000点を返して供託を1本減らします。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           FilledButton(
             onPressed: () {
-              session.declareRiichi(i);
+              session.cancelRiichi(i);
               Navigator.pop(context);
             },
-            child: const Text('リーチする'),
+            child: const Text('取消する'),
           ),
         ],
       ),
@@ -239,6 +292,28 @@ class _SessionPageState extends State<SessionPage> {
               Navigator.pop(context);
             },
             child: const Text('リセットする'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmUndo(BuildContext context) {
+    if (session.history.isEmpty) return;
+    final headline = session.history.first.headline;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('直前の記録を取り消す'),
+        content: Text('直前の記録「$headline」を取り消して、記録前の状態に戻します。よろしいですか？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          FilledButton(
+            onPressed: () {
+              session.undoLast();
+              Navigator.pop(context);
+            },
+            child: const Text('元に戻す'),
           ),
         ],
       ),
@@ -325,6 +400,31 @@ class _RecordWinDialogState extends State<_RecordWinDialog> {
   final TextEditingController _pointsCtrl = TextEditingController(text: '1000');
   final TextEditingController _dealerPayCtrl = TextEditingController(text: '1000');
   final TextEditingController _nonDealerPayCtrl = TextEditingController(text: '500');
+  String? _errorText;
+
+  /// 入力値を検証する。問題があればエラーメッセージを、なければnullを返す。
+  ///
+  /// 空欄や不正な文字列は `int.tryParse` が `null` を返し、これまでは
+  /// `?? 0` で無言のまま0点として記録されてしまっていた（本場・供託は
+  /// 加算されたまま親番・局数だけ進んでしまう実害あり）。0点以下の値も
+  /// 和了として不自然なため、あわせて弾く。
+  String? _validate() {
+    if (_kind == _WinKind.ron) {
+      final points = int.tryParse(_pointsCtrl.text.trim());
+      if (points == null || points <= 0) return '和了点は1以上の数字で入力してください。';
+    } else {
+      final dealerPay = int.tryParse(_dealerPayCtrl.text.trim());
+      if (dealerPay == null || dealerPay <= 0) {
+        final label = _winnerIndex == session.dealerIndex ? '子3人が払う点数' : '親が払う点数';
+        return '$labelは1以上の数字で入力してください。';
+      }
+      if (_winnerIndex != session.dealerIndex) {
+        final nonDealerPay = int.tryParse(_nonDealerPayCtrl.text.trim());
+        if (nonDealerPay == null || nonDealerPay <= 0) return '子（他2人）が払う点数は1以上の数字で入力してください。';
+      }
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -410,6 +510,10 @@ class _RecordWinDialogState extends State<_RecordWinDialog> {
                 ),
               ],
             ],
+            if (_errorText != null) ...[
+              const SizedBox(height: 12),
+              Text(_errorText!, style: const TextStyle(color: Colors.red)),
+            ],
           ],
         ),
       ),
@@ -417,12 +521,17 @@ class _RecordWinDialogState extends State<_RecordWinDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
         FilledButton(
           onPressed: () {
+            final error = _validate();
+            if (error != null) {
+              setState(() => _errorText = error);
+              return;
+            }
             if (_kind == _WinKind.ron) {
-              final points = int.tryParse(_pointsCtrl.text) ?? 0;
+              final points = int.parse(_pointsCtrl.text.trim());
               session.recordRon(winnerIndex: _winnerIndex, loserIndex: _loserIndex, points: points);
             } else {
-              final dealerPay = int.tryParse(_dealerPayCtrl.text) ?? 0;
-              final nonDealerPay = isDealerWin ? dealerPay : (int.tryParse(_nonDealerPayCtrl.text) ?? 0);
+              final dealerPay = int.parse(_dealerPayCtrl.text.trim());
+              final nonDealerPay = isDealerWin ? dealerPay : int.parse(_nonDealerPayCtrl.text.trim());
               session.recordTsumo(winnerIndex: _winnerIndex, dealerPay: dealerPay, nonDealerPay: nonDealerPay);
             }
             Navigator.pop(context);

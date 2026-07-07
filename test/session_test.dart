@@ -212,4 +212,117 @@ void main() {
       expect(s.history.last.headline, contains('ロン和了'));
     });
   });
+
+  group('リーチ宣言のガード・取消', () {
+    test('持ち点が1000点未満の場合はリーチを宣言できない（何も変化しない）', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      // 999点まで減らす。
+      s.recordRon(winnerIndex: 1, loserIndex: 0, points: 24001);
+      expect(s.players[0].score, 999);
+      final ok = s.declareRiichi(0);
+      expect(ok, isFalse);
+      expect(s.players[0].score, 999);
+      expect(s.kyotaku, 0);
+    });
+
+    test('同じ局で同じプレイヤーが二重にリーチ宣言することはできない', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      expect(s.declareRiichi(0), isTrue);
+      expect(s.declareRiichi(0), isFalse);
+      expect(s.players[0].score, 25000 - 1000); // 1回分しか引かれない
+      expect(s.kyotaku, 1);
+    });
+
+    test('cancelRiichi()でリーチ宣言を取り消すと、1000点戻り供託が1本減る', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      s.declareRiichi(0);
+      final ok = s.cancelRiichi(0);
+      expect(ok, isTrue);
+      expect(s.players[0].score, 25000);
+      expect(s.kyotaku, 0);
+      expect(s.riichiThisHand[0], isFalse);
+      // 取り消し後は再度宣言できる。
+      expect(s.declareRiichi(0), isTrue);
+    });
+
+    test('宣言していないプレイヤーをcancelRiichi()しても何も起こらない', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      expect(s.cancelRiichi(0), isFalse);
+      expect(s.players[0].score, 25000);
+      expect(s.kyotaku, 0);
+    });
+
+    test('局が確定する（和了・流局が記録される）と、リーチ宣言状況は全員falseにリセットされる', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      s.declareRiichi(0);
+      expect(s.riichiThisHand[0], isTrue);
+      s.recordDraw(tenpaiIndexes: [0]);
+      expect(s.riichiThisHand, everyElement(isFalse));
+    });
+  });
+
+  group('undoLast()', () {
+    test('ロンを取り消すと、点数・親番・本場・供託が記録前の状態に戻る', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      s.recordRon(winnerIndex: 1, loserIndex: 2, points: 5800); // 親交代が起きる
+      final ok = s.undoLast();
+      expect(ok, isTrue);
+      expect(s.players.map((p) => p.score), everyElement(25000));
+      expect(s.dealerIndex, 0);
+      expect(s.honba, 0);
+      expect(s.handNumber, 1);
+      expect(s.history, isEmpty);
+    });
+
+    test('ツモを取り消すと、支払いが正しく巻き戻る', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      s.recordTsumo(winnerIndex: 0, dealerPay: 2000, nonDealerPay: 2000);
+      expect(s.undoLast(), isTrue);
+      expect(s.players.map((p) => p.score), everyElement(25000));
+      expect(s.honba, 0);
+      expect(s.history, isEmpty);
+    });
+
+    test('供託が絡む和了を取り消しても、供託本数と持ち点が記録前の値に戻る', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      s.declareRiichi(0);
+      s.declareRiichi(1);
+      expect(s.kyotaku, 2);
+      s.recordRon(winnerIndex: 2, loserIndex: 3, points: 1000); // kyotakuが2→0に消費される
+      expect(s.kyotaku, 0);
+      expect(s.undoLast(), isTrue);
+      // リーチ宣言時点（供託2本、A・Bが1000点ずつ減った状態）まで戻る。
+      expect(s.kyotaku, 2);
+      expect(s.players[0].score, 25000 - 1000);
+      expect(s.players[1].score, 25000 - 1000);
+      expect(s.players[2].score, 25000);
+      expect(s.players[3].score, 25000);
+    });
+
+    test('本場が進んだ後の連荘を取り消すと、本場も1つ前の値に戻る', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      s.recordRon(winnerIndex: 0, loserIndex: 1, points: 1000); // 連荘: honba 0→1
+      s.recordRon(winnerIndex: 0, loserIndex: 2, points: 1000); // 連荘: honba 1→2
+      expect(s.honba, 2);
+      expect(s.undoLast(), isTrue);
+      expect(s.honba, 1);
+      expect(s.dealerIndex, 0);
+    });
+
+    test('履歴が空の場合はundoLast()はfalseを返し、何も変化しない', () {
+      final s = MahjongSession();
+      s.start(names: ['A', 'B', 'C', 'D']);
+      expect(s.undoLast(), isFalse);
+      expect(s.players.map((p) => p.score), everyElement(25000));
+    });
+  });
 }

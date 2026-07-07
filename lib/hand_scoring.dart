@@ -392,11 +392,15 @@ List<Yaku> detectYakus(HandInput h) {
     if (m.isTriplet || m.isQuad) {
       final t = m.baseTile;
       if (t.isHonor && isValueHonor(t, h.seatWind, h.roundWind)) {
+        // 連風牌（自風と場風が同じ牌。例: 親の東場東）の場合は、
+        // 「役牌:自風」と「役牌:場風」の両方が成立し、2翻になる。
+        // ここを else if にすると連風牌のときに片方しか計上されなくなるため、
+        // 自風・場風は独立した if で判定する（風牌以外の三元牌とは排他）。
         if (t.rank == h.seatWind) out.add(const Yaku('役牌:自風', 1, 1));
-        else if (t.rank == h.roundWind) out.add(const Yaku('役牌:場風', 1, 1));
-        else if (t.rank == 5) out.add(const Yaku('役牌:白', 1, 1));
-        else if (t.rank == 6) out.add(const Yaku('役牌:發', 1, 1));
-        else if (t.rank == 7) out.add(const Yaku('役牌:中', 1, 1));
+        if (t.rank == h.roundWind) out.add(const Yaku('役牌:場風', 1, 1));
+        if (t.rank == 5) out.add(const Yaku('役牌:白', 1, 1));
+        if (t.rank == 6) out.add(const Yaku('役牌:發', 1, 1));
+        if (t.rank == 7) out.add(const Yaku('役牌:中', 1, 1));
       }
     }
   }
