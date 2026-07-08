@@ -181,6 +181,11 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
   // おまかせ入力は副露（鳴き）非対応のため常に門前。手動入力時は従来通り melds から判定する。
   bool get _effectiveMenzen => _inputMode == _InputMode.bulk ? true : menzen;
 
+  // 嶺上開花は「手の中に槓（カン）が実在する」ことが前提。おまかせ入力は
+  // 14枚固定でカンを表現できない（カンがあれば手牌は15枚になるため）ので、
+  // 手動入力かつ実際にいずれかの面子を槓にしている場合のみ選択可能にする。
+  bool get _hasAnyQuad => _inputMode == _InputMode.manual && _isQuad.any((q) => q);
+
   // ===== 履歴（直近3件）=====
   final List<_HistoryEntry> _history = [];
 
@@ -543,6 +548,10 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
       _isQuad[index] = value;
       _groups[index].clear();
       _groupError = null;
+      // 手の中に槓が1つも無くなった場合、嶺上開花は成立し得ないためオフに戻す。
+      if (!_isQuad.any((q) => q)) {
+        rinshan = false;
+      }
     });
   }
 
@@ -1075,13 +1084,13 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
     return DropdownButton<int>(value: value, items: winds, onChanged: (v) => onChanged(v ?? 1));
   }
 
-  Widget _stepper(int value, ValueChanged<int> onChanged) {
+  Widget _stepper(int value, ValueChanged<int>? onChanged) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(onPressed: () => onChanged(value - 1), icon: const Icon(Icons.remove)),
+        IconButton(onPressed: onChanged == null ? null : () => onChanged(value - 1), icon: const Icon(Icons.remove)),
         Text('$value', style: const TextStyle(fontSize: 18)),
-        IconButton(onPressed: () => onChanged(value + 1), icon: const Icon(Icons.add)),
+        IconButton(onPressed: onChanged == null ? null : () => onChanged(value + 1), icon: const Icon(Icons.add)),
       ],
     );
   }
@@ -1170,12 +1179,16 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
                       selected: melds[index].open,
                       onSelected: (v) => setState(() {
                         melds[index].open = v;
-                        // 副露（鳴き）が入った時点で天和・地和（完全な門前かつ
-                        // 最初のツモという前提）は成立し得ないため、誤って
+                        // 副露（鳴き）が入った時点で天和・地和・立直系（いずれも
+                        // 完全な門前が前提）は成立し得ないため、誤って
                         // 引き継がれないようオフに戻す。
                         if (v) {
                           tenhou = false;
                           chiihou = false;
+                          riichi = false;
+                          doubleRiichi = false;
+                          ippatsu = false;
+                          uraDora = 0;
                         }
                       }),
                     ),
@@ -1528,8 +1541,9 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('嶺上開花（ツモ）'),
+              subtitle: const Text('槓（カン）した後の嶺上牌でのツモ和了'),
               value: rinshan,
-              onChanged: (winType == hs.WinType.tsumo)
+              onChanged: (winType == hs.WinType.tsumo && _hasAnyQuad)
                   ? (v) => setState(() {
                         rinshan = v;
                         if (v) {
@@ -1539,6 +1553,11 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
                       })
                   : null,
             ),
+            if (!_hasAnyQuad)
+              Text(
+                '※ 嶺上開花は手の中に槓（カン）がある場合のみ選択できます',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('河底撈魚（ロン）'),
@@ -1634,7 +1653,14 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
                     ButtonSegment(value: _InputMode.manual, label: Text('手動入力')),
                   ],
                   selected: {_inputMode},
-                  onSelectionChanged: (v) => setState(() => _inputMode = v.first),
+                  onSelectionChanged: (v) => setState(() {
+                    _inputMode = v.first;
+                    // おまかせ入力（14枚固定）は槓を表現できないため、
+                    // 嶺上開花が残っていたらオフに戻す。
+                    if (_inputMode == _InputMode.bulk) {
+                      rinshan = false;
+                    }
+                  }),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -1775,32 +1801,47 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
                 SwitchListTile(
                   title: const Text('立直'),
                   value: riichi,
-                  onChanged: (v) => setState(() {
-                    riichi = v;
-                    if (!v) {
-                      doubleRiichi = false;
-                      ippatsu = false;
-                      uraDora = 0;
-                    }
-                  }),
+                  onChanged: _effectiveMenzen
+                      ? (v) => setState(() {
+                            riichi = v;
+                            if (!v) {
+                              doubleRiichi = false;
+                              ippatsu = false;
+                              uraDora = 0;
+                            }
+                          })
+                      : null,
                 ),
                 SwitchListTile(
                   title: const Text('ダブル立直'),
                   value: doubleRiichi,
-                  onChanged: riichi ? (v) => setState(() => doubleRiichi = v) : null,
+                  onChanged: (riichi && _effectiveMenzen) ? (v) => setState(() => doubleRiichi = v) : null,
                 ),
                 SwitchListTile(
                   title: const Text('一発'),
                   value: ippatsu,
-                  onChanged: riichi ? (v) => setState(() => ippatsu = v) : null,
+                  onChanged: (riichi && _effectiveMenzen) ? (v) => setState(() => ippatsu = v) : null,
                 ),
+                if (!_effectiveMenzen)
+                  Text(
+                    '※ 副露（鳴き）がある手では立直・ダブル立直・一発は成立しません',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
 
                 const SizedBox(height: 8),
                 _row('ドラ', _stepper(dora, (v) => setState(() => dora = v.clamp(0, 20)))),
                 const SizedBox(height: 8),
                 _row('赤ドラ', _stepper(akaDora, (v) => setState(() => akaDora = v.clamp(0, 20)))),
                 const SizedBox(height: 8),
-                _row('裏ドラ', _stepper(uraDora, (v) => setState(() => uraDora = v.clamp(0, 20)))),
+                _row(
+                  '裏ドラ',
+                  _stepper(uraDora, riichi ? (v) => setState(() => uraDora = v.clamp(0, 20)) : null),
+                ),
+                if (!riichi)
+                  Text(
+                    '※ 裏ドラは立直時のみ加算できます',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
 
                 const SizedBox(height: 12),
 

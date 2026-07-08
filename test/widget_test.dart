@@ -435,4 +435,154 @@ void main() {
     );
     expect(honorTile, findsOneWidget);
   });
+
+  testWidgets('嶺上開花は手の中に槓（カン）が無い間は選択できず、槓にすると選択できるようになる',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('手動入力'));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.descendant(
+      of: find.byType(ListView),
+      matching: find.byType(Scrollable),
+    );
+
+    // デフォルト（槓なし）では嶺上開花は選択できないはず。
+    await tester.scrollUntilVisible(find.text('嶺上開花（ツモ）'), 300, scrollable: scrollable);
+    var rinshanSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '嶺上開花（ツモ）'));
+    expect(rinshanSwitch.onChanged, isNull, reason: '手の中に槓が無い間は嶺上開花は選択不可のはず');
+    expect(find.text('※ 嶺上開花は手の中に槓（カン）がある場合のみ選択できます'), findsOneWidget);
+
+    // 面子1を槓（カン）に切り替えると、嶺上開花が選択可能になるはず。
+    await tester.scrollUntilVisible(find.widgetWithText(FilterChip, '槓（カン）').first, 300, scrollable: scrollable);
+    await tester.tap(find.widgetWithText(FilterChip, '槓（カン）').first);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('嶺上開花（ツモ）'), 300, scrollable: scrollable);
+    rinshanSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '嶺上開花（ツモ）'));
+    expect(rinshanSwitch.onChanged, isNotNull, reason: '槓を作った後は嶺上開花が選択可能になるはず');
+
+    await tester.tap(find.widgetWithText(SwitchListTile, '嶺上開花（ツモ）'));
+    await tester.pumpAndSettle();
+    rinshanSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '嶺上開花（ツモ）'));
+    expect(rinshanSwitch.value, isTrue);
+
+    // 槓を解除（通常の面子に戻す。「槓（カン）」チップはトグルなので再タップでOFFになる）すると、
+    // 嶺上開花は自動でOFFに戻り選択不可に戻るはず。
+    await tester.scrollUntilVisible(find.widgetWithText(FilterChip, '槓（カン）').first, 300, scrollable: scrollable);
+    await tester.tap(find.widgetWithText(FilterChip, '槓（カン）').first);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('嶺上開花（ツモ）'), 300, scrollable: scrollable);
+    rinshanSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '嶺上開花（ツモ）'));
+    expect(rinshanSwitch.value, isFalse, reason: '槓が無くなったら嶺上開花は自動でOFFに戻るはず');
+    expect(rinshanSwitch.onChanged, isNull, reason: '槓が無くなったら嶺上開花は再び選択不可になるはず');
+  });
+
+  testWidgets('裏ドラは立直がオフの間は増減できず、立直をオンにすると操作できるようになる',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('手動入力'));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.descendant(
+      of: find.byType(ListView),
+      matching: find.byType(Scrollable),
+    );
+
+    await tester.scrollUntilVisible(find.text('裏ドラ'), 300, scrollable: scrollable);
+    // 「裏ドラ」の行にある+ボタン（IconButtonのうち Icons.add を持つもの）は、
+    // 立直がオフの間は無効（onPressed: null）のはず。
+    final uraDoraRow = find.ancestor(of: find.text('裏ドラ'), matching: find.byType(Row)).first;
+    Finder addButtonFinder() => find.ancestor(
+          of: find.descendant(of: uraDoraRow, matching: find.byIcon(Icons.add)),
+          matching: find.byType(IconButton),
+        );
+    var addButton = tester.widget<IconButton>(addButtonFinder());
+    expect(addButton.onPressed, isNull, reason: '立直がオフの間は裏ドラを増やせないはず');
+    expect(find.text('※ 裏ドラは立直時のみ加算できます'), findsOneWidget);
+
+    // 立直をオンにすると、裏ドラの+ボタンが有効になるはず。
+    await tester.scrollUntilVisible(find.text('立直'), 300, scrollable: scrollable);
+    await tester.tap(find.text('立直'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('裏ドラ'), 300, scrollable: scrollable);
+    addButton = tester.widget<IconButton>(addButtonFinder());
+    expect(addButton.onPressed, isNotNull, reason: '立直がオンになったら裏ドラを増やせるはず');
+
+    // 立直をオフに戻すと、裏ドラも再び操作不可になるはず。
+    await tester.scrollUntilVisible(find.text('立直'), 300, scrollable: scrollable);
+    await tester.tap(find.text('立直'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('裏ドラ'), 300, scrollable: scrollable);
+    addButton = tester.widget<IconButton>(addButtonFinder());
+    expect(addButton.onPressed, isNull, reason: '立直をオフに戻したら裏ドラも再び操作不可になるはず');
+  });
+
+  testWidgets('面子を鳴き（オープン）にすると立直・ダブル立直・一発はオフに戻り選択不可になる',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('手動入力'));
+    await tester.pumpAndSettle();
+
+    final scrollable = find.descendant(
+      of: find.byType(ListView),
+      matching: find.byType(Scrollable),
+    );
+
+    // 門前の状態で立直・ダブル立直・一発を全てONにしておく。
+    await tester.scrollUntilVisible(find.text('立直'), 300, scrollable: scrollable);
+    await tester.tap(find.text('立直'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ダブル立直'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('一発'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '立直')).value, isTrue);
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'ダブル立直')).value, isTrue);
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '一発')).value, isTrue);
+
+    // 面子1を鳴き（オープン）にする → 門前が崩れるため、立直系は全て自動でOFFに戻り、
+    // 以後は選択自体もできなくなるはず。
+    await tester.scrollUntilVisible(find.widgetWithText(FilterChip, '鳴き（オープン）').first, 300, scrollable: scrollable);
+    await tester.tap(find.widgetWithText(FilterChip, '鳴き（オープン）').first);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('立直'), 300, scrollable: scrollable);
+    final riichiSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '立直'));
+    final doubleRiichiSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'ダブル立直'));
+    final ippatsuSwitch = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '一発'));
+
+    expect(riichiSwitch.value, isFalse, reason: '鳴きが入った時点で立直は自動でOFFに戻るはず');
+    expect(riichiSwitch.onChanged, isNull, reason: '副露ありの手では立直は選択不可になるはず');
+    expect(doubleRiichiSwitch.value, isFalse);
+    expect(doubleRiichiSwitch.onChanged, isNull);
+    expect(ippatsuSwitch.value, isFalse);
+    expect(ippatsuSwitch.onChanged, isNull);
+    expect(find.text('※ 副露（鳴き）がある手では立直・ダブル立直・一発は成立しません'), findsOneWidget);
+  });
 }
