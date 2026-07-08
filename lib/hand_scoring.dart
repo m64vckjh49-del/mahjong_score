@@ -1,5 +1,4 @@
 // lib/hand_scoring.dart
-import 'dart:math';
 
 enum Suit { m, p, s, z } // man, pin, sou, honors
 enum MeldType { sequence, triplet, quad, pair }
@@ -313,8 +312,11 @@ List<Yaku> detectYakus(HandInput h) {
     out.add(const Yaku('七対子', 2, 2));
 
     // 立直系
-    if (h.doubleRiichi) out.add(const Yaku('ダブル立直', 2, 0));
-    else if (h.riichi) out.add(const Yaku('立直', 1, 0));
+    if (h.doubleRiichi) {
+      out.add(const Yaku('ダブル立直', 2, 0));
+    } else if (h.riichi) {
+      out.add(const Yaku('立直', 1, 0));
+    }
     if ((h.riichi || h.doubleRiichi) && h.ippatsu) {
       out.add(const Yaku('一発', 1, 0));
     }
@@ -343,8 +345,11 @@ List<Yaku> detectYakus(HandInput h) {
   // =========================
 
   // 立直系
-  if (h.doubleRiichi) out.add(const Yaku('ダブル立直', 2, 0));
-  else if (h.riichi) out.add(const Yaku('立直', 1, 0));
+  if (h.doubleRiichi) {
+    out.add(const Yaku('ダブル立直', 2, 0));
+  } else if (h.riichi) {
+    out.add(const Yaku('立直', 1, 0));
+  }
   if ((h.riichi || h.doubleRiichi) && h.ippatsu) {
     out.add(const Yaku('一発', 1, 0));
   }
@@ -381,8 +386,11 @@ List<Yaku> detectYakus(HandInput h) {
     for (final c in seq.values) {
       pairs += c ~/ 2;
     }
-    if (pairs >= 2) out.add(const Yaku('二盃口', 3, 0));
-    else if (pairs == 1) out.add(const Yaku('一盃口', 1, 0));
+    if (pairs >= 2) {
+      out.add(const Yaku('二盃口', 3, 0));
+    } else if (pairs == 1) {
+      out.add(const Yaku('一盃口', 1, 0));
+    }
   }
 
   final groups = groupsOf(h);
@@ -420,8 +428,11 @@ List<Yaku> detectYakus(HandInput h) {
   final suits = _numberSuitsUsed(h);
   final hasHonor = _hasHonor(h);
   if (suits.length == 1) {
-    if (hasHonor) out.add(const Yaku('混一色', 3, 2));
-    else out.add(const Yaku('清一色', 6, 5));
+    if (hasHonor) {
+      out.add(const Yaku('混一色', 3, 2));
+    } else {
+      out.add(const Yaku('清一色', 6, 5));
+    }
   }
 
   // 一気通貫
@@ -564,7 +575,9 @@ int _chuurenLevel(HandInput h) {
   final suit = suits.first;
 
   final counts = List<int>.filled(10, 0); // index 1..9
-  for (final t in tiles) counts[t.rank]++;
+  for (final t in tiles) {
+    counts[t.rank]++;
+  }
 
   final base = counts[1] >= 3 &&
       counts[9] >= 3 &&
@@ -806,7 +819,7 @@ String limitLabel({
   required int fuRounded,
   required int yakumanMultiplier, // 0なら通常手
 }) {
-  if (yakumanMultiplier > 0) return yakumanMultiplier == 1 ? '役満' : '${yakumanMultiplier}倍役満';
+  if (yakumanMultiplier > 0) return yakumanMultiplier == 1 ? '役満' : '$yakumanMultiplier倍役満';
   if (han >= 13) return '数え役満';
   if (han >= 11) return '三倍満';
   if (han >= 8) return '倍満';

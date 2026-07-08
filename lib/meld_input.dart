@@ -306,7 +306,7 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
     return Image.asset(
       _tileAssetPath(t),
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => Center(child: Text(_tileLabel(t))),
+      errorBuilder: (_, _, _) => Center(child: Text(_tileLabel(t))),
     );
   }
 
@@ -732,7 +732,7 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: _history.length,
-                    separatorBuilder: (_, __) => const Divider(height: 16),
+                    separatorBuilder: (_, _) => const Divider(height: 16),
                     itemBuilder: (_, i) {
                       final e = _history[i];
                       return ExpansionTile(
@@ -1021,7 +1021,7 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
 
       if (hand.isDealer) {
         final total = fromDealer * 3;
-        return 'ツモ: ${fromDealer}オール（計 $total）';
+        return 'ツモ: $fromDealerオール（計 $total）';
       } else {
         final total = fromDealer + fromNonDealer * 2;
         return 'ツモ: 親 $fromDealer / 子 $fromNonDealer（計 $total）';
@@ -1498,15 +1498,22 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
               'シャンポン待ちは片方の刻子だけがロン牌で完成（明刻扱い）します。もう片方は暗刻のままです。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            for (final i in tripletIndices)
-              RadioListTile<int>(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text('面子${i + 1}（${_groups[i].map(_tileLabel).join("")}）'),
-                value: i,
-                groupValue: tripletIndices.contains(winningMeldIndex) ? winningMeldIndex : null,
-                onChanged: (v) => setState(() => winningMeldIndex = v ?? -1),
+            RadioGroup<int>(
+              groupValue: tripletIndices.contains(winningMeldIndex) ? winningMeldIndex : null,
+              onChanged: (v) => setState(() => winningMeldIndex = v ?? -1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final i in tripletIndices)
+                    RadioListTile<int>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text('面子${i + 1}（${_groups[i].map(_tileLabel).join("")}）'),
+                      value: i,
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
