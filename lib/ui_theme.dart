@@ -76,12 +76,18 @@ class GradientAppBarBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppPalette.gradientStart, AppPalette.gradientEnd],
+    // AppBarのflexibleSpaceはStack(fit: StackFit.passthrough)の中に置かれ、
+    // 高さ方向がloose（min 0）な制約になることがある。DecoratedBoxは子を持たない
+    // ため、その場合は面積0に潰れてグラデーションが全く見えなくなってしまう。
+    // SizedBox.expandで明示的に利用可能な領域いっぱいに広げる。
+    return const SizedBox.expand(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppPalette.gradientStart, AppPalette.gradientEnd],
+          ),
         ),
       ),
     );
