@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:mahjong_score/meld_input.dart'; // ← ここに追加
 import 'package:mahjong_score/session.dart';
+import 'package:mahjong_score/ui_theme.dart';
 import 'package:mahjong_score/unload_guard.dart';
 
 void main() => runApp(const MyApp());
@@ -114,7 +115,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '麻雀点数',
-      theme: ThemeData(useMaterial3: true),
+      theme: buildAppTheme(),
       home: const MeldInputPage(),
     );
   }

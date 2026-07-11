@@ -26,7 +26,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MeldInputPage), findsOneWidget);
-    expect(find.text('面子入力（牌パレット）'), findsOneWidget);
+    expect(find.text('🀄 面子入力（牌パレット）'), findsOneWidget);
     // デフォルトは「おまかせ入力」なので、14枚一括入力用のカードが表示される。
     expect(find.text('手牌（14枚）'), findsOneWidget);
     expect(find.text('面子1（3枚）'), findsNothing);

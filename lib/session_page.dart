@@ -10,6 +10,7 @@
 
 import 'package:flutter/material.dart';
 import 'session.dart';
+import 'ui_theme.dart';
 
 int _firstOther(int n, int exclude) {
   for (var i = 0; i < n; i++) {
@@ -60,7 +61,12 @@ class _SessionPageState extends State<SessionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('対局スコア')),
+      appBar: AppBar(
+        title: const Text('🀄 対局スコア'),
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        flexibleSpace: const GradientAppBarBackground(),
+      ),
       body: AnimatedBuilder(
         animation: session,
         builder: (context, _) => session.isStarted ? _boardView(context) : _setupView(context),
@@ -116,7 +122,7 @@ class _SessionPageState extends State<SessionPage> {
           onChanged: (v) => setState(() => _umaPreset = v ?? UmaPreset.m5_10),
         ),
         const SizedBox(height: 20),
-        FilledButton(
+        GradientButton(
           onPressed: () {
             final start = int.tryParse(_startCtrl.text) ?? 25000;
             final ret = int.tryParse(_returnCtrl.text) ?? 30000;
@@ -127,6 +133,7 @@ class _SessionPageState extends State<SessionPage> {
               umaPreset: _umaPreset,
             );
           },
+          icon: const Icon(Icons.play_arrow),
           child: const Text('対局を開始'),
         ),
       ],

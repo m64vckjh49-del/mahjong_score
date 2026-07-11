@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'hand_scoring.dart' as hs;
 import 'hand_decomposition.dart' as hd;
 import 'session_page.dart';
+import 'ui_theme.dart';
 
 // ======== UI用モデル ========
 enum Suit { m, p, s, z }
@@ -1373,8 +1374,9 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
             OutlinedButton(onPressed: _clearAll, child: const Text('全部クリア')),
             const SizedBox(width: 12),
             Expanded(
-              child: FilledButton(
+              child: GradientButton(
                 onPressed: _calcAndShow,
+                icon: const Icon(Icons.calculate),
                 child: Text('計算（門前: ${_effectiveMenzen ? "はい" : "いいえ"}）'),
               ),
             ),
@@ -1636,7 +1638,10 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('面子入力（牌パレット）'),
+        title: const Text('🀄 面子入力（牌パレット）'),
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        flexibleSpace: const GradientAppBarBackground(),
         actions: [
           IconButton(
             tooltip: '対局スコア（台に1台置いて共有）',
