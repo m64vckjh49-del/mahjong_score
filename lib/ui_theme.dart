@@ -113,7 +113,13 @@ class GradientButton extends StatelessWidget {
     final disabled = onPressed == null;
     final disabledColor = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38);
 
-    return Ink(
+    // 以前は Ink(decoration: ...) を使っていたが、Inkの装飾は「一番近い祖先の
+    // Material」のペイント時にink featureとして描画される仕組みのため、間に
+    // 挟まる各種レイヤー構成によってはグラデーションが画面に反映されないことが
+    // ある（実ビルドで再現し、ボタンの背景が透明のまま文字だけが乗って見づらく
+    // なっていた）。Containerは自分自身のRenderObjectで装飾を直接描画するため
+    // この問題が起きない。タップ時のリップルだけをMaterial+InkWellで重ねる。
+    return Container(
       decoration: BoxDecoration(
         gradient: disabled
             ? null
@@ -123,30 +129,34 @@ class GradientButton extends StatelessWidget {
         color: disabled ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12) : null,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: InkWell(
+      child: Material(
+        type: MaterialType.transparency,
         borderRadius: BorderRadius.circular(12),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          child: DefaultTextStyle.merge(
-            style: TextStyle(
-              color: disabled ? disabledColor : Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  IconTheme(
-                    data: IconThemeData(color: disabled ? disabledColor : Colors.white),
-                    child: icon!,
-                  ),
-                  const SizedBox(width: 8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(
+                color: disabled ? disabledColor : Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    IconTheme(
+                      data: IconThemeData(color: disabled ? disabledColor : Colors.white),
+                      child: icon!,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Flexible(child: child),
                 ],
-                Flexible(child: child),
-              ],
+              ),
             ),
           ),
         ),
