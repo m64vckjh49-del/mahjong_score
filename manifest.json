@@ -1,11 +1,11 @@
 {
-    "name": "mahjong_score",
-    "short_name": "mahjong_score",
+    "name": "麻雀点数計算",
+    "short_name": "麻雀点数",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F6FBF8",
+    "theme_color": "#0B5D3B",
+    "description": "麻雀の点数計算・対局スコア管理アプリ",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
