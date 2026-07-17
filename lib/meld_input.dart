@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'hand_scoring.dart' as hs;
 import 'hand_decomposition.dart' as hd;
 import 'session_page.dart';
+import 'score_table_page.dart';
 import 'ui_theme.dart';
 
 // ======== UI用モデル ========
@@ -1643,6 +1644,13 @@ class _MeldInputPageState extends State<MeldInputPage> with SingleTickerProvider
         foregroundColor: Colors.white,
         flexibleSpace: const GradientAppBarBackground(),
         actions: [
+          IconButton(
+            tooltip: '点数早見表',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ScoreTablePage()),
+            ),
+            icon: const Icon(Icons.table_chart),
+          ),
           IconButton(
             tooltip: '対局スコア（台に1台置いて共有）',
             onPressed: () => Navigator.of(context).push(
